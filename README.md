@@ -1,6 +1,6 @@
-# Let's Build a Simple Database
+# 13 天自制简易数据库
 
-[View rendered tutorial](https://cstack.github.io/db_tutorial/) (with more details on what this is.)
+[在线预览](https://db-tutorial.yian.me/) | 原作：[https://github.com/cstack/db_tutorial](https://github.com/cstack/db_tutorial) | [原版（英文）在线预览](https://cstack.github.io/db_tutorial/) 
 
 ## 备忘
 安装 Ruby 和 Jekyll：[https://jekyllrb.com/docs/installation/](https://jekyllrb.com/docs/installation/)
