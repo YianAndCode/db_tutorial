@@ -18,10 +18,10 @@
         <h1>{{ site.title | default: site.github.repository_name }}</h1>
         <p>{{ site.description | default: site.github.project_tagline }}</p>
 
-        <p class="view"><a href="{{ site.baseurl }}/">Overview</a></p>
+        <p class="view"><a href="{{ site.baseurl }}/">概览</a></p>
 
         {% if site.github.is_project_page %}
-          <p class="view"><a href="{{ site.github.repository_url }}">View on GitHub (pull requests welcome)</a></p>
+          <p class="view"><a href="{{ site.github.repository_url }}">在 GitHub 上查看（欢迎提交 PR！）</a></p>
         {% endif %}
 
         {% if site.github.is_user_page %}
@@ -75,7 +75,7 @@
       <footer>
         {% if site.github.is_project_page %}
         <p><a href="{{site.baseurl}}/feed.xml">rss</a> | <a href="https://ifttt.com/applets/60708433d-rss-feed-to-email">subscribe by email</a></p>
-        <p>This project is maintained by <a href="{{ site.github.owner_url }}">{{ site.github.owner_name }}</a></p>
+        <p>本中文翻译项目由 <a href="{{ site.github.owner_url }}">{{ site.github.owner_name }}</a> 维护</p>
         {% endif %}
         <p><small>Hosted on GitHub Pages &mdash; Theme by <a href="https://github.com/orderedlist">orderedlist</a></small></p>
       </footer>

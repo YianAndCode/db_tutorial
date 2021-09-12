@@ -1,5 +1,5 @@
 ---
-title: How Does a Database Work?
+title: 数据库是怎么工作的？
 ---
 
 - What format is data saved in? (in memory and on disk)

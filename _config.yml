@@ -1,7 +1,8 @@
 theme: jekyll-theme-minimal
-title: Let's Build a Simple Database
-description: Writing a sqlite clone from scratch in C
-google_analytics: UA-105767942-1
+title: 13 天自制简易数据库
+description: 用 C 语言从零实现一个 sqlite
+google_analytics: UA-85009265-2
+lang: zh-Hans
 collections:
   parts:
     output: true
