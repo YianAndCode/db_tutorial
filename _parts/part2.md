@@ -1,19 +1,19 @@
 ---
-title: Part 2 - World's Simplest SQL Compiler and Virtual Machine
+title: 第二部分 - 世界上最简单的 SQL 编译器和虚拟机
 date: 2017-08-31
 ---
 
-We're making a clone of sqlite. The "front-end" of sqlite is a SQL compiler that parses a string and outputs an internal representation called bytecode.
+我们开始复刻 sqlite，sqlite 的“前端”是一个 SQL 编译器，它可以解析字符串然后输出一个内部表示，我们将这个内部表示称之为字节码。
 
-This bytecode is passed to the virtual machine, which executes it.
+字节码将会被传递给虚拟机，然后被虚拟机执行。
 
 {% include image.html url="assets/images/arch2.gif" description="SQLite Architecture (https://www.sqlite.org/arch.html)" %}
 
-Breaking things into two steps like this has a couple advantages:
-- Reduces the complexity of each part (e.g. virtual machine does not worry about syntax errors)
-- Allows compiling common queries once and caching the bytecode for improved performance
+像这样分成两步会有很多好处：
+- 降低了每一部分的复杂度（例如：虚拟机无需关心语法错误）
+- 允许将常见查询编译一次后就缓存起来以提高性能
 
-With this in mind, let's refactor our `main` function and support two new keywords in the process:
+按照这个思路，我们来重构一下 main 函数和新增两个关键字：
 
 ```diff
  int main(int argc, char* argv[]) {
@@ -52,13 +52,13 @@ With this in mind, let's refactor our `main` function and support two new keywor
  }
 ```
 
-Non-SQL statements like `.exit` are called "meta-commands". They all start with a dot, so we check for them and handle them in a separate function.
+非 SQL 语句，例如 `.exit` 我们称之为“元命令”，这些命令以 `.` 开头，我们只需要判断第一个字符是否为 `.`，然后交给单独的函数来处理这些命令。
 
-Next, we add a step that converts the line of input into our internal representation of a statement. This is our hacky version of the sqlite front-end.
+接下来，我们添加一个步骤，将用户输入行转换为语句的内部表示。我们这个 sqlite 的前端实现得比较 hacky（译者注：指 demo 级的代码）。
 
-Lastly, we pass the prepared statement to `execute_statement`. This function will eventually become our virtual machine.
+最后，我们将预处理过的语句传递给 `execute_statement`，这个函数最终将会成为我们的虚拟机。
 
-Notice that two of our new functions return enums indicating success or failure:
+请注意，我们的两个新函数的返回值是枚举值，用于指示是成功或是失败：
 
 ```c
 typedef enum {
@@ -69,9 +69,9 @@ typedef enum {
 typedef enum { PREPARE_SUCCESS, PREPARE_UNRECOGNIZED_STATEMENT } PrepareResult;
 ```
 
-"Unrecognized statement"? That seems a bit like an exception. But [exceptions are bad](https://www.youtube.com/watch?v=EVhCUSgNbzo) (and C doesn't even support them), so I'm using enum result codes wherever practical. The C compiler will complain if my switch statement doesn't handle a member of the enum, so we can feel a little more confident we handle every result of a function. Expect more result codes to be added in the future.
+“未识别的语句（UNRECOGNIZED_STATEMENT）”？有点类似于异常（exception），不过[exception是糟糕的](https://www.youtube.com/watch?v=EVhCUSgNbzo)（并且 C 语言也不支持异常），所以只要可以我就用枚举值来标记。如果我的 switch 语句没有处理每一个枚举值，C 编译器就会警告，所以我们可以不用担心漏了处理函数返回的任一值。尤其是在以后添加了更多的返回值。
 
-`do_meta_command` is just a wrapper for existing functionality that leaves room for more commands:
+`do_meta_command` 是对现有函数的封装，为以后增加更多的命令做准备：
 
 ```c
 MetaCommandResult do_meta_command(InputBuffer* input_buffer) {
@@ -83,7 +83,7 @@ MetaCommandResult do_meta_command(InputBuffer* input_buffer) {
 }
 ```
 
-Our "prepared statement" right now just contains an enum with two possible values. It will contain more data as we allow parameters in statements:
+我们的“预处理语句”现在只有一个有两个成员的枚举，因为我们允许在语句中传参，所以后续将会包含更多数据。
 
 ```c
 typedef enum { STATEMENT_INSERT, STATEMENT_SELECT } StatementType;
@@ -93,7 +93,7 @@ typedef struct {
 } Statement;
 ```
 
-`prepare_statement` (our "SQL Compiler") does not understand SQL right now. In fact, it only understands two words:
+`prepare_statement` （我们的“SQL 编译器”）目前还不能解析 SQL，它现在只认识两个关键词：
 ```c
 PrepareResult prepare_statement(InputBuffer* input_buffer,
                                 Statement* statement) {
@@ -110,9 +110,9 @@ PrepareResult prepare_statement(InputBuffer* input_buffer,
 }
 ```
 
-Note that we use `strncmp` for "insert" since the "insert" keyword will be followed by data. (e.g. `insert 1 cstack foo@bar.com`)
+注意，我们在判断“insert”的时候用的是 `strncmp` 函数，因为 `insert` 关键词后面一般都会跟着要插入的数据（例如： `insert 1 cstack foo@bar.com`）
 
-Lastly, `execute_statement` contains a few stubs:
+最后，`execute_statement` 包含了一些桩（译者注：桩程序，指对将要开发的代码的一种临时替代）：
 ```c
 void execute_statement(Statement* statement) {
   switch (statement->type) {
@@ -126,9 +126,9 @@ void execute_statement(Statement* statement) {
 }
 ```
 
-Note that it doesn't return any error codes because there's nothing that could go wrong yet.
+函数没有返回任何错误码，因为目前为止这个函数也没有什么可以报错的。
 
-With these refactors, we now recognize two new keywords!
+改造之后，我们的程序现在可以识别两个新的关键词了！
 ```command-line
 ~ ./db
 db > insert foo bar
@@ -145,7 +145,9 @@ db > .exit
 ~
 ```
 
-The skeleton of our database is taking shape... wouldn't it be nice if it stored data? In the next part, we'll implement `insert` and `select`, creating the world's worst data store. In the mean time, here's the entire diff from this part:
+我们的数据库框架已经初具雏形了...如果它能存储数据岂不是更棒？在下一章，我们将实现 `insert` 和 `select`，虽然会是世界上最糟糕的数据存储。
+
+下面是本章的代码的完整变更：
 
 ```diff
 @@ -10,6 +10,23 @@ struct InputBuffer_t {
