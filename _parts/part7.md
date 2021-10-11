@@ -1,50 +1,50 @@
 ---
-title: Part 7 - Introduction to the B-Tree
+title: 第七部分 - B树
 date: 2017-09-23
 ---
 
-The B-Tree is the data structure SQLite uses to represent both tables and indexes, so it's a pretty central idea. This article will just introduce the data structure, so it won't have any code.
+SQLite 的表和索引的数据结构都采用了B树（B-Tree），因此B树是一个非常重要的概念。在本章中，我们将只介绍B树这种数据结构，因此不会有任何代码。
 
-Why is a tree a good data structure for a database?
+为什么说树是一个非常适合数据库的数据结构呢？
 
-- Searching for a particular value is fast (logarithmic time)
-- Inserting / deleting a value you've already found is fast (constant-ish time to rebalance)
-- Traversing a range of values is fast (unlike a hash map)
+- 查找一个特定的值非常快（只需要对数时间）
+- 插入/删除一个已经找到的值是非常快的（重新平衡的时间很稳定）
+- 范围遍历非常快（相对哈希表而言）
 
-A B-Tree is different from a binary tree (the "B" probably stands for the inventor's name, but could also stand for "balanced"). Here's an example B-Tree:
+B树不同于二叉树（“B”可能表示的是发明者的名字，也可以表示“balanced” *注：「平衡的」*）。下面是一个B树的例子：
 
 {% include image.html url="assets/images/B-tree.png" description="example B-Tree (https://en.wikipedia.org/wiki/File:B-tree.svg)" %}
 
-Unlike a binary tree, each node in a B-Tree can have more than 2 children. Each node can have up to m children, where m is called the tree's "order". To keep the tree mostly balanced, we also say nodes have to have at least m/2 children (rounded up).
+和二叉树不同，B树的每一个节点可以拥有超过两个子节点。每个节点可以拥有最多 m 个子节点，m 又被叫做树的“阶”。为了使树尽可能的接近平衡，我们还说节点必须拥有至少 m/2 （向上取整）个子节点。
 
-Exceptions:
-- Leaf nodes have 0 children
-- The root node can have fewer than m children but must have at least 2
-- If the root node is a leaf node (the only node), it still has 0 children
+例外：
+- 叶子节点没有子节点
+- 根节点的子节点数可以少于 m，但必须不小于 2
+- 如果根节点就是叶子节点（唯一的节点），那么它可以没有子节点
 
-The picture from above is a B-Tree, which SQLite uses to store indexes. To store tables, SQLites uses a variation called a B+ tree.
+上图所示是一个B树，在 SQLite 中被用于存储索引，而为了存储表数据，SQLite 用了B树的一种变体，我们称之为 B+ 树。
 
 |                               | B-tree         | B+ tree             |
 |-------------------------------|----------------|---------------------|
-| Pronounced                    | "Bee Tree"     | "Bee Plus Tree"     |
-| Used to store                 | Indexes        | Tables              |
-| Internal nodes store keys     | Yes            | Yes                 |
-| Internal nodes store values   | Yes            | No                  |
-| Number of children per node   | Less           | More                |
-| Internal nodes vs. leaf nodes | Same structure | Different structure |
+| 发音                           | "Bee Tree"     | "Bee Plus Tree"     |
+| 用于存储                       | 索引            | 表数据               |
+| 内部节点是否存储键               | 是             | 是                   |
+| 内部节点是否存储值               | 是             | 否                   |
+| 每个节点的子节点数量              | 少             | 多                |
+| 内部节点和叶子节点结构对比         | 相同           | 不同                 |
 
-Until we get to implementing indexes, I'm going to talk solely about B+ trees, but I'll just refer to it as a B-tree or a btree.
+在我们开始实现索引之前，我将只介绍 B+ 树，但我会将它称之为B-树（B-Tree）或者B树（btree）。
 
-Nodes with children are called "internal" nodes. Internal nodes and leaf nodes are structured differently:
+“内部”节点指那些拥有子节点的节点。内部节点和叶子节点的结构是不一样的：
 
-| For an order-m tree... | Internal Node                 | Leaf Node           |
+| 对于一棵 m 阶树...       | 内部节点                       | 叶子节点             |
 |------------------------|-------------------------------|---------------------|
-| Stores                 | keys and pointers to children | keys and values     |
-| Number of keys         | up to m-1                     | as many as will fit |
-| Number of pointers     | number of keys + 1            | none                |
-| Number of values       | none                          | number of keys      |
-| Key purpose            | used for routing              | paired with value   |
-| Stores values?         | No                            | Yes                 |
+| 存储的数据               | 键和指向子节点的指针             | 键和值               |
+| 键的数量                | 最多 m-1                       | 尽可能的多            |
+| 指针的数量               | 键数量 + 1                     | 0                   |
+| 值的数量                | 0                             | 等于键的数量          |
+| 键的用途                | 用于路由                        | 与值匹配             |
+| 是否存储值？             | 否                            | 是                  |
 
 Let's work through an example to see how a B-tree grows as you insert elements into it. To keep things simple, the tree will be order 3. That means:
 
