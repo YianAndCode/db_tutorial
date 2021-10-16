@@ -46,43 +46,43 @@ B树不同于二叉树（“B”可能表示的是发明者的名字，也可以
 | 键的用途                | 用于路由                        | 与值匹配             |
 | 是否存储值？             | 否                            | 是                  |
 
-Let's work through an example to see how a B-tree grows as you insert elements into it. To keep things simple, the tree will be order 3. That means:
+让我们通过一个例子来了解当你往一棵B树插入一个元素会发生什么。对了，简单起见，我们用一棵三阶树来示范，这就意味着：
 
-- up to 3 children per internal node
-- up to 2 keys per internal node
-- at least 2 children per internal node
-- at least 1 key per internal node
+- 每个内部节点最多有 3 个子节点
+- 每个内部节点最多有 2 个 key
+- 每个内部节点至少有 2 个子节点
+- 每个内部节点至少有 1 个 key
 
-An empty B-tree has a single node: the root node. The root node starts as a leaf node with zero key/value pairs:
+一棵空B树只有一个节点：根节点。开始的时候，由于没有键/值对，根节点也是叶子节点：
 
-{% include image.html url="assets/images/btree1.png" description="empty btree" %}
+{% include image.html url="assets/images/btree1.png" description="空B树" %}
 
-If we insert a couple key/value pairs, they are stored in the leaf node in sorted order.
+如果这时我们插入一组键值对，那么它们会被排序后保存到叶子节点中。
 
-{% include image.html url="assets/images/btree2.png" description="one-node btree" %}
+{% include image.html url="assets/images/btree2.png" description="一个节点的B树" %}
 
-Let's say that the capacity of a leaf node is two key/value pairs. When we insert another, we have to split the leaf node and put half the pairs in each node. Both nodes become children of a new internal node which will now be the root node.
+假设叶子节点的容量是两个键/值对。当再插入一个键/值对时，我们就必须将这个叶子节点拆分到两个节点，每个节点拥有一半键/值对。这时根节点就会变成一个新的内部节点，且刚刚拆分的两个节点将成为这个内部节点的子节点。
 
-{% include image.html url="assets/images/btree3.png" description="two-level btree" %}
+{% include image.html url="assets/images/btree3.png" description="两层的B树" %}
 
-The internal node has 1 key and 2 pointers to child nodes. If we want to look up a key that is less than or equal to 5, we look in the left child. If we want to look up a key greater than 5, we look in the right child.
+内部节点有一个键和两个指向子节点的指针。如果我们想要查找小于等于 5 的 key ，那么我们需要找左子节点；而如果我们要找的 key 是大于 5 的，则找右子节点。
 
-Now let's insert the key "2". First we look up which leaf node it would be in if it was present, and we arrive at the left leaf node. The node is full, so we split the leaf node and create a new entry in the parent node.
+我们试着插入一个 key “2”。首先我们先判断假如它已经存在于B树上，它会在哪个叶子节点，会发现我们找到了左叶子节点。这个节点现在是满的，所以我们要将这个叶子节点拆分，然后在父节点创建一个入口。
 
 {% include image.html url="assets/images/btree4.png" description="four-node btree" %}
 
-Let's keep adding keys. 18 and 21. We get to the point where we have to split again, but there's no room in the parent node for another key/pointer pair.
+我们继续插入新的 key，18 和 21。然后我们就会再次面临需要再次拆分，但这个时候在父节点已经没有空间来存放更多的键/值对了。
 
 {% include image.html url="assets/images/btree5.png" description="no room in internal node" %}
 
-The solution is to split the root node into two internal nodes, then create new root node to be their parent.
+解决方案就是拆分根节点成两个内部节点，然后创建一个新的根节点作为它们的父节点。
 
 {% include image.html url="assets/images/btree6.png" description="three-level btree" %}
 
-The depth of the tree only increases when we split the root node. Every leaf node has the same depth and close to the same number of key/value pairs, so the tree remains balanced and quick to search.
+当我们拆分根节点的时候，树的深度就增加了。每个叶子节点都有相同的深度和相近的键/值对数，这棵树保持了平衡因此查找是很快的。
 
-I'm going to hold off on discussion of deleting keys from the tree until after we've implemented insertion.
+在我们实现了插入之前，我将先不展开关于删除 key 的介绍了。
 
-When we implement this data structure, each node will correspond to one page. The root node will exist in page 0. Child pointers will simply be the page number that contains the child node.
+在我们实现这个数据结构的时候，每个节点对应一页。根节点会保存在 0 号页，子节点指针将只是包含了子节点的页号。
 
-Next time, we start implementing the btree!
+在下一章，我们将开始实现B树！
