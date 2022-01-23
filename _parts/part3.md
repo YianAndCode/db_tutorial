@@ -1,31 +1,31 @@
 ---
-title: Part 3 - An In-Memory, Append-Only, Single-Table Database
+title: 第三部分 - 一个只保存在内存中、只能新增记录的单表数据库
 date: 2017-09-01
 ---
 
-We're going to start small by putting a lot of limitations on our database. For now, it will:
+为了使我们的数据库更加简单，在一开始的时候我们先加一些限制条件，比如：
 
-- support two operations: inserting a row and printing all rows
-- reside only in memory (no persistence to disk)
-- support a single, hard-coded table
+- 只支持两个操作：插入一行和打印所有行
+- 只存在内存中（不持久化到磁盘）
+- 只支持一张表，并且这张表是硬编码（俗称“写死”）的
 
-Our hard-coded table is going to store users and look like this:
+我们这张硬编码的表用来存储用户数据，它的结构是这样的：
 
-| column   | type         |
+| 字段名    | 类型         |
 |----------|--------------|
 | id       | integer      |
 | username | varchar(32)  |
 | email    | varchar(255) |
 
-This is a simple schema, but it gets us to support multiple data types and multiple sizes of text data types.
+表结构很简单，但它需要我们实现对多种数据类型和多种大小的文本数据类型的支持。
 
-`insert` statements are now going to look like this:
+`插入`语句暂定这样：
 
 ```
 insert 1 cstack foo@bar.com
 ```
 
-That means we need to upgrade our `prepare_statement` function to parse arguments
+这也就意味着我们需要更新我们的 `prepare_statement` 函数来解析多个参数
 
 ```diff
    if (strncmp(input_buffer->buffer, "insert", 6) == 0) {
@@ -41,7 +41,7 @@ That means we need to upgrade our `prepare_statement` function to parse argument
    if (strcmp(input_buffer->buffer, "select") == 0) {
 ```
 
-We store those parsed arguments into a new `Row` data structure inside the statement object:
+我们需要定义一个新的数据结构 `Row` 并将解析好的参数保存其中，同时在 `Statement` 中定义一个 `Row` 类型的 `row_to_insert` 字段。
 
 ```diff
 +#define COLUMN_USERNAME_SIZE 32
@@ -54,21 +54,21 @@ We store those parsed arguments into a new `Row` data structure inside the state
 +
  typedef struct {
    StatementType type;
-+  Row row_to_insert;  // only used by insert statement
++  Row row_to_insert;  // 只在插入语句使用
  } Statement;
 ```
 
-Now we need to copy that data into some data structure representing the table. SQLite uses a B-tree for fast lookups, inserts and deletes. We'll start with something simpler. Like a B-tree, it will group rows into pages, but instead of arranging those pages as a tree it will arrange them as an array.
+现在我们需要将数据复制到一个可以呈现表的数据结构中。为了高效查找、插入和删除，SQLite 使用了 B-tree。但我们一开始会先用一些更简单的数据结构来代替。类似 B-tree，它会将数据行按页分组，但它不会将页编排成树，而是编排成数组。
 
-Here's my plan:
+下面是我的方案：
 
-- Store rows in blocks of memory called pages
-- Each page stores as many rows as it can fit
-- Rows are serialized into a compact representation with each page
-- Pages are only allocated as needed
-- Keep a fixed-size array of pointers to pages
+- 将行保存到被称之为“页”的内存块中
+- 每一页保存尽可能多的行
+- 行保存到页中时会被序列化成一个紧凑形式
+- 页只在需要时才被创建
+- 保存固定大小的页指针数组
 
-First we'll define the compact representation of a row:
+我们首先定义一行数据的紧凑形式：
 ```diff
 +#define size_of_attribute(Struct, Attribute) sizeof(((Struct*)0)->Attribute)
 +
@@ -81,16 +81,16 @@ First we'll define the compact representation of a row:
 +const uint32_t ROW_SIZE = ID_SIZE + USERNAME_SIZE + EMAIL_SIZE;
 ```
 
-This means the layout of a serialized row will look like this:
+一个序列化后的行的结构是这样的：
 
-| column   | size (bytes) | offset       |
+| 列       | 大小（字节数）  | 偏移量        |
 |----------|--------------|--------------|
 | id       | 4            | 0            |
 | username | 32           | 4            |
 | email    | 255          | 36           |
-| total    | 291          |              |
+| 总计      | 291          |              |
 
-We also need code to convert to and from the compact representation.
+我们还需要写一些代码来序列化和反序列化行。
 ```diff
 +void serialize_row(Row* source, void* destination) {
 +  memcpy(destination + ID_OFFSET, &(source->id), ID_SIZE);
@@ -105,7 +105,7 @@ We also need code to convert to and from the compact representation.
 +}
 ```
 
-Next, a `Table` structure that points to pages of rows and keeps track of how many rows there are:
+接下来，定义一个 `表` 结构体，里面包含了页指针数组和一个用于记录当前行数的变量：
 ```diff
 +const uint32_t PAGE_SIZE = 4096;
 +#define TABLE_MAX_PAGES 100
@@ -118,13 +118,13 @@ Next, a `Table` structure that points to pages of rows and keeps track of how ma
 +} Table;
 ```
 
-I'm making our page size 4 kilobytes because it's the same size as a page used in the virtual memory systems of most computer architectures. This means one page in our database corresponds to one page used by the operating system. The operating system will move pages in and out of memory as whole units instead of breaking them up.
+之所以将页大小定义为 4KB，是因为在大多数计算机架构中虚拟内存页大小是 4KB。这意味着我们数据库中的一页对应于操作系统的一页。操作系统在换页时可以将我们的页整体换入或换出，而不是将其分开。
 
-I'm setting an arbitrary limit of 100 pages that we will allocate. When we switch to a tree structure, our database's maximum size will only be limited by the maximum size of a file. (Although we'll still limit how many pages we keep in memory at once)
+最大页数 100 是随意设置的，当我们后面改用树结构时，数据库的大小将只由文件大小决定。（当然我们会限制一次最多有多少页保存在内存中）
 
-Rows should not cross page boundaries. Since pages probably won't exist next to each other in memory, this assumption makes it easier to read/write rows.
+行不应该超出页的边界。由于页与页在内存中大概率不是紧挨在一起的，所以这个设定会使得行的读/写变得更加简单。
 
-Speaking of which, here is how we figure out where to read/write in memory for a particular row:
+说到这里，下面是我们该如何确定要读/写的指定行在内存中的位置的方法：
 ```diff
 +void* row_slot(Table* table, uint32_t row_num) {
 +  uint32_t page_num = row_num / ROWS_PER_PAGE;
@@ -139,7 +139,7 @@ Speaking of which, here is how we figure out where to read/write in memory for a
 +}
 ```
 
-Now we can make `execute_statement` read/write from our table structure:
+现在我们可以通过 `execute_statement` 来从我们的表结构体中读/写数据了：
 ```diff
 -void execute_statement(Statement* statement) {
 +ExecuteResult execute_insert(Statement* statement, Table* table) {
@@ -178,8 +178,7 @@ Now we can make `execute_statement` read/write from our table structure:
  }
 ```
 
-Lastly, we need to initialize the table, create the respective
-memory release function and handle a few more error cases:
+最后，我们需要初始化数据表，创建相应的内存释放函数，以及添加更多的错误处理逻辑：
 
 ```diff
 + Table* new_table() {
@@ -193,7 +192,7 @@ memory release function and handle a few more error cases:
 +
 +void free_table(Table* table) {
 +    for (int i = 0; table->pages[i]; i++) {
-+	free(table->pages[i]);
++        free(table->pages[i]);
 +    }
 +    free(table);
 +}
@@ -231,7 +230,7 @@ memory release function and handle a few more error cases:
  }
  ```
 
- With those changes we can actually save data in our database!
+有了上面这些改造，我们可以保存数据到我们的数据库中了！
  ```command-line
 ~ ./db
 db > insert 1 cstack foo@bar.com
@@ -248,11 +247,11 @@ db > .exit
 ~
 ```
 
-Now would be a great time to write some tests, for a couple reasons:
-- We're planning to dramatically change the data structure storing our table, and tests would catch regressions.
-- There are a couple edge cases we haven't tested manually (e.g. filling up the table)
+一鼓作气，我们写一些测试用例：
+- 我们后面会大改存储数据的数据结构，有了测试用例可以方便回归测试
+- 有一系列边界条件我们没有手动测试过（例如写满整张表）
 
-We'll address those issues in the next part. For now, here's the complete diff from this part:
+这些问题我们将在下一章解决。下面是本章的完整代码变更：
 ```diff
 @@ -2,6 +2,7 @@
  #include <stdio.h>
@@ -290,7 +289,7 @@ We'll address those issues in the next part. For now, here's the complete diff f
 +
 +typedef struct {
 +  StatementType type;
-+  Row row_to_insert; //only used by insert statement
++  Row row_to_insert; // 只在插入语句使用
 +} Statement;
 +
 +#define size_of_attribute(Struct, Attribute) sizeof(((Struct*)0)->Attribute)
