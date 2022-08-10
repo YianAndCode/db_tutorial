@@ -1,11 +1,11 @@
 ---
-title: Part 5 - Persistence to Disk
+title: 第五部分 - 持久化到磁盘
 date: 2017-09-08
 ---
 
 > "Nothing in the world can take the place of persistence." -- [Calvin Coolidge](https://en.wikiquote.org/wiki/Calvin_Coolidge)
 
-Our database lets you insert records and read them back out, but only as long as you keep the program running. If you kill the program and start it back up, all your records are gone. Here's a spec for the behavior we want:
+我们的数据库已经可以插入数据和查询数据了，但仅限于程序一直在运行，如果你退出程序再重新启动它，你会发现之前的数据全部都丢了。而我们期望的效果应该是满足下面这个测试用例的：
 
 ```ruby
 it 'keeps data after closing connection' do
@@ -29,15 +29,15 @@ it 'keeps data after closing connection' do
 end
 ```
 
-Like sqlite, we're going to persist records by saving the entire database to a file.
+像 SQLite 一样，我们也会把整个数据库的记录保存到文件中。
 
-We already set ourselves up to do that by serializing rows into page-sized memory blocks. To add persistence, we can simply write those blocks of memory to a file, and read them back into memory the next time the program starts up.
+在此前的工作中，我们已经能够把一行行数据序列化成页大小的内存块。而增加持久化功能，我们只需要把这些内存块写入到文件中即可，下次程序启动的时候再从文件中把数据读回到内存。
 
-To make this easier, we're going to make an abstraction called the pager. We ask the pager for page number `x`, and the pager gives us back a block of memory. It first looks in its cache. On a cache miss, it copies data from disk into memory (by reading the database file).
+为了使代码更清晰，我们将创建一个叫做 pager 的抽象层。当我们需要取得页号为 `x` 的页时，pager 将会返回一整块内存。pager 首先会查询缓存，如果缓存中没有，它就会读取数据库文件，将数据从磁盘拷贝到内存中。
 
 {% include image.html url="assets/images/arch-part5.gif" description="How our program matches up with SQLite architecture" %}
 
-The Pager accesses the page cache and the file. The Table object makes requests for pages through the pager:
+Pager 直接访问页缓存和文件，而数据表对象则是通过 pager 来请求页：
 
 ```diff
 +typedef struct {
@@ -53,11 +53,11 @@ The Pager accesses the page cache and the file. The Table object makes requests 
  } Table;
 ```
 
-I'm renaming `new_table()` to `db_open()` because it now has the effect of opening a connection to the database. By opening a connection, I mean:
+我把 `new_table()` 重命名为 `db_open()` 了，因为它现在有打开数据库连接的功能。“打开连接”指的是：
 
-- opening the database file
-- initializing a pager data structure
-- initializing a table data structure
+ - 打开数据库文件
+ - 初始化 pager 结构体
+ - 初始化表结构体
 
 ```diff
 -Table* new_table() {
@@ -74,7 +74,7 @@ I'm renaming `new_table()` to `db_open()` because it now has the effect of openi
  }
 ```
 
-`db_open()` in turn calls `pager_open()`, which opens the database file and keeps track of its size. It also initializes the page cache to all `NULL`s.
+`db_open()` 将会调用 `pager_open()`，这个函数内部会打开数据库文件，并且保持对数据库文件大小的追踪。同时它也会初始化页缓存为 `NULL`。
 
 ```diff
 +Pager* pager_open(const char* filename) {
@@ -104,7 +104,7 @@ I'm renaming `new_table()` to `db_open()` because it now has the effect of openi
 +}
 ```
 
-Following our new abstraction, we move the logic for fetching a page into its own method:
+为了遵循对页的新的抽象概念，我们需要将获取一页的逻辑移到 pager 自己的方法中：
 
 ```diff
  void* row_slot(Table* table, uint32_t row_num) {
@@ -121,7 +121,7 @@ Following our new abstraction, we move the logic for fetching a page into its ow
  }
 ```
 
-The `get_page()` method has the logic for handling a cache miss. We assume pages are saved one after the other in the database file: Page 0 at offset 0, page 1 at offset 4096, page 2 at offset 8192, etc. If the requested page lies outside the bounds of the file, we know it should be blank, so we just allocate some memory and return it. The page will be added to the file when we flush the cache to disk later.
+`get_page()` 方法需要有处理未命中缓存的逻辑。我们假设所有的页是一个接一个保存在文件中的：第 0 页偏移量为 0，第 1 页偏移量为 4096，第 2 页偏移量为 8192，以此类推。如果请求的页超出了文件边界，那我们可以认为该页应该为空白页，只需要申请一段内存并返回即可。这一页在稍后刷缓存的时候会被追加到文件后面。
 
 
 ```diff
@@ -158,11 +158,11 @@ The `get_page()` method has the logic for handling a cache miss. We assume pages
 +}
 ```
 
-For now, we'll wait to flush the cache to disk until the user closes the connection to the database. When the user exits, we'll call a new method called `db_close()`, which
+现在，我们将会一直等到用户关闭数据库连接，才将缓存刷写到磁盘。当用户退出时，我们会调用一个叫做 `db_close()` 的新方法，它将：
 
-- flushes the page cache to disk
-- closes the database file
-- frees the memory for the Pager and Table data structures
+- 刷写页缓存到磁盘
+- 关闭数据库文件
+- 释放 Pager 和数据表所申请的内存
 
 ```diff
 +void db_close(Table* table) {
@@ -215,7 +215,7 @@ For now, we'll wait to flush the cache to disk until the user closes the connect
      return META_COMMAND_UNRECOGNIZED_COMMAND;
 ```
 
-In our current design, the length of the file encodes how many rows are in the database, so we need to write a partial page at the end of the file. That's why `pager_flush()` takes both a page number and a size. It's not the greatest design, but it will go away pretty quickly when we start implementing the B-tree.
+在当前的设计中，文件长度信息包含了数据库有多少行，所以在文件末尾我们写入的可能不是完整的页。这也是为什么 `pager_flush()` 会同时需要页号和大小。这不是一个最佳设计，不过在后面我们用上 B 树之后就不会有这种情况了。
 
 ```diff
 +void pager_flush(Pager* pager, uint32_t page_num, uint32_t size) {
@@ -241,7 +241,7 @@ In our current design, the length of the file encodes how many rows are in the d
 +}
 ```
 
-Lastly, we need to accept the filename as a command-line argument. Don't forget to also add the extra argument to `do_meta_command`:
+最后，我们需要从命令行参数中接收数据库文件名。别忘了添加一个参数到 `do_meta_command`：
 
 ```diff
  int main(int argc, char* argv[]) {
@@ -263,7 +263,7 @@ Lastly, we need to accept the filename as a command-line argument. Don't forget 
 -      switch (do_meta_command(input_buffer)) {
 +      switch (do_meta_command(input_buffer, table)) {
 ```
-With these changes, we're able to close then reopen the database, and our records are still there!
+有了这些修改，我们现在可以关闭然后重新打开数据库了，数据不会丢失！
 
 ```
 ~ ./db mydb.db
@@ -282,23 +282,21 @@ db > .exit
 ~
 ```
 
-For extra fun, let's take a look at `mydb.db` to see how our data is being stored. I'll use vim as a hex editor to look at the memory layout of the file:
+如果你感兴趣的话，可以看看 `mydb.db` 是怎么保存我们的数据的。我将会使用 vim 作为十六进制编辑器来看文件的内存布局：
 
 ```
 vim mydb.db
 :%!xxd
 ```
-{% include image.html url="assets/images/file-format.png" description="Current File Format" %}
+{% include image.html url="assets/images/file-format.png" description="当前文件格式" %}
 
-The first four bytes are the id of the first row (4 bytes because we store a `uint32_t`). It's stored in little-endian byte order, so the least significant byte comes first (01), followed by the higher-order bytes (00 00 00). We used `memcpy()` to copy bytes from our `Row` struct into the page cache, so that means the struct was laid out in memory in little-endian byte order. That's an attribute of the machine I compiled the program for. If we wanted to write a database file on my machine, then read it on a big-endian machine, we'd have to change our `serialize_row()` and `deserialize_row()` methods to always store and read bytes in the same order.
+首四字节（`uint32_t` 占用 4 字节空间）是第一行数据的 id。因为存储的时候是小端字节序，所以最小有效字节在前（01），后面跟着的是高位字节（00 00 00）。我们用了 `memcpy()` 来拷贝 `Row` 结构数据到页缓存中，也就意味着结构体在内存中排布是小端字节序。这是我编译这个程序使用的计算机决定的。如果我们要在我这台机器上写入数据库文件，然后再到另一台大端字节序的机器上读取数据，我们就必须修改 `serialize_row()` 和 `deserialize_row()` 方法来确保我们写入和读取的字节是相同的字节序。
 
-The next 33 bytes store the username as a null-terminated string. Apparently "cstack" in ASCII hexadecimal is `63 73 74 61 63 6b`, followed by a null character (`00`). The rest of the 33 bytes are unused.
+紧接着的 33 个字节保存了以空字符作为结束的 username 字符串。很显然，`63 73 74 61 63 6b` 是 `castack` 的 ASCII 码的十六进制数，紧接着的是一个空字符（`00`）。剩下的 26 字节没有被使用。
 
-The next 256 bytes store the email in the same way. Here we can see some random junk after the terminating null character. This is most likely due to uninitialized memory in our `Row` struct. We copy the entire 256-byte email buffer into the file, including any bytes after the end of the string. Whatever was in memory when we allocated that struct is still there. But since we use a terminating null character, it has no effect on behavior.
+接下来的 256 字节以相同的方式保存了 email。在这里我们可以看到在空结束符之后有一些随机的“垃圾”数据。这很有可能是因为我们没有初始化 `Row` 结构体，然后我们又完整地拷贝了这 256 字节的 email 数据到文件中，包括结束符后的那些字节。因为当我们为结构体分配内存空间之后，分配前内存中已有的内容也不会被清空。不过由于我们使用了空字符作为结束，所以行为上不会有影响。
 
-**NOTE**: If we wanted to ensure that all bytes are initialized, it would
-suffice to use `strncpy` instead of `memcpy` while copying the `username`
-and `email` fields of rows in `serialize_row`, like so:
+**注意**：如果我们想要确保所有的字节都被初始化，那么我们在 `serialize_row` 中拷贝 `username` 和 `email` 字段时，使用 `strncpy` 来代替 `memcpy`，这样就足够了：
 
 ```diff
  void serialize_row(Row* source, void* destination) {
@@ -310,15 +308,15 @@ and `email` fields of rows in `serialize_row`, like so:
  }
 ```
 
-## Conclusion
+## 结论
 
-Alright! We've got persistence. It's not the greatest. For example if you kill the program without typing `.exit`, you lose your changes. Additionally, we're writing all pages back to disk, even pages that haven't changed since we read them from disk. These are issues we can address later.
+到此为止，我们已经实现了持久化！虽然不是最佳方案。例如，如果你不是用 `.exit` 而是直接杀死进程，你就会丢失所有数据改动。另外，即使页面没有改动，我们也会将所有页都写回磁盘。这些问题我们晚点解决。
 
-Next time we'll introduce cursors, which should make it easier to implement the B-tree.
+下一章将介绍游标，一个可以让我们更容易实现 B 树的东西。
 
-Until then!
+敬请期待！
 
-## Complete Diff
+## 完整的代码修改
 ```diff
 +#include <errno.h>
 +#include <fcntl.h>
@@ -548,7 +546,7 @@ Until then!
      print_prompt();
 ```
 
-And the diff to our tests:
+测试用例的改动：
 ```diff
  describe 'database' do
 +  before do
